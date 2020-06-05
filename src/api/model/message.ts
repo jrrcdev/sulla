@@ -20,6 +20,10 @@ export interface Message {
   broadcast: boolean;
   isForwarded: boolean;
   labels: any[];
+  /**
+   * An array of all mentioned numbers in this message.
+   */
+  mentionedJidList: string[];
   caption: string;
   sender: {
     id: string;
@@ -55,6 +59,7 @@ export interface Message {
   isMedia: boolean;
   isNotification: boolean;
   isPSA: boolean;
+  fromMe: boolean;
   chat: {
     id: string;
     pendingMsgs: boolean;

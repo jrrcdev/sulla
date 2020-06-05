@@ -12,6 +12,13 @@ import { ParticipantChangedEventModel } from './model/group-metadata';
 import { useragent } from '../config/puppeteer.config'
 import sharp from 'sharp';
 
+enum namespace {
+  Chat = 'Chat',
+  Msg = 'Msg',
+  Contact = 'Contact',
+  GroupMetadata = 'GroupMetadata'
+}
+
 export const getBase64 = async (url: string, optionsOverride: any = {} ) => {
   try {
     const res = await axios({
@@ -54,11 +61,21 @@ declare module WAPI {
   const onIncomingCall: (callback: Function) => any;
   const onAddedToGroup: (callback: Function) => any;
   const onBattery: (callback: Function) => any;
+  const onPlugged: (callback: Function) => any;
+  const onStory: (callback: Function) => any;
+  const setChatBackgroundColourHex: (hex: string) => boolean;
+  const darkMode: (activate: boolean) => boolean;
   const onParticipantsChanged: (groupId: string, callback: Function) => any;
   const _onParticipantsChanged: (groupId: string, callback: Function) => any;
   const onLiveLocation: (chatId: string, callback: Function) => any;
+  const getSingleProperty: (namespace: string, id: string, property : string) => any;
   const sendMessage: (to: string, content: string) => Promise<string>;
+  const downloadFileWithCredentials: (url: string) => Promise<string>;
   const sendMessageWithMentions: (to: string, content: string) => Promise<string>;
+  const sendReplyWithMentions: (to: string, content: string, replyMessageId: string) => Promise<string>;
+  const postTextStatus: (text: string, textRgba: string, backgroundRgba: string, font: string) => Promise<string | boolean>;
+  const postImageStatus: (data: string, caption: string) => Promise<string | boolean>;
+  const postVideoStatus: (data: string, caption: string) => Promise<string | boolean>;
   const setChatState: (chatState: ChatState, chatId: string) => void;
   const reply: (to: string, content: string, quotedMsg: string | Message) => Promise<string|boolean>;
   const getGeneratedUserAgent: (userAgent?: string) => string;
@@ -68,8 +85,10 @@ declare module WAPI {
   const getMessageById: (mesasgeId: string) => Message;
   const setMyName: (newName: string) => void;
   const setMyStatus: (newStatus: string) => void;
+  const setProfilePic: (data: string) => Promise<boolean>;
   const setPresence: (available: boolean) => void;
   const getStatus: (contactId: string) => void;
+  const getCommonGroups: (contactId: string) => Promise<{id:string,title:string}[]>;
   const forceUpdateLiveLocation: (chatId: string) => Promise<LiveLocationChangedEvent []> | boolean;
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
   const getGroupAdmins: (groupId: string) => Promise<Contact[]>;
@@ -82,6 +101,7 @@ declare module WAPI {
   const sendImageAsSticker: (webpBase64: string, to: string, metadata?: any) => Promise<any>;
   const createGroup: (groupName: string, contactId: string|string[]) => Promise<any>;
   const sendSeen: (to: string) => Promise<boolean>;
+  const markAsUnread: (to: string) => Promise<boolean>;
   const isChatOnline: (id: string) => Promise<boolean>;
   const sendLinkWithAutoPreview: (to: string,url: string,text: string) => Promise<boolean>;
   const contactBlock: (id: string) => Promise<boolean>;
@@ -97,7 +117,8 @@ declare module WAPI {
     filename: string,
     caption: string,
     quotedMsgId?: string,
-    waitForId?: boolean
+    waitForId?: boolean,
+    ptt?: boolean
   ) => Promise<string>;
   const sendMessageWithThumb: (
     thumb: string,
@@ -129,6 +150,7 @@ declare module WAPI {
   const getWAVersion: () => String;
   const getMe: () => any;
   const syncContacts: () => boolean;
+  const getAmountOfLoadedMessages: () => number;
   const deleteAllStatus: () => Promise<boolean>;
   const getMyStatusArray: () => Promise<any>;
   const getAllUnreadMessages: () => any;
@@ -137,12 +159,15 @@ declare module WAPI {
   const getAllChats: () => any;
   const getBatteryLevel: () => number;
   const getIsPlugged: () => boolean;
+  const clearAllChats: () => Promise<boolean>;
+  const cutMsgCache: () => boolean;
   const getChat: (contactId: string) => Chat;
   const getLastSeen: (contactId: string) => Promise<number | boolean>;
   const getProfilePicFromServer: (chatId: string) => any;
   const getAllChatIds: () => string[];
   const getAllChatsWithNewMsg: () => Chat[];
   const getAllNewMessages: () => any;
+  const getUseHereString: () => Promise<string>;
   const getAllGroups: () => Chat[];
   const getGroupParticipantIDs: (groupId: string) => Promise<Id[]>;
   const joinGroupViaLink: (link: string) => Promise<string | boolean>;
@@ -175,11 +200,11 @@ declare module WAPI {
   ) => [Message]
 }
 
-export class Whatsapp {
+export class Client {
   _loadedModules: any[];
 
   /**
-   * @param page [Page] [Puppeteer Page]{@link https://pptr.dev/#?product=Puppeteer&version=v2.1.1&show=api-class-page} running web.whatsapp.com
+   * @param page [Page] [Puppeteer Page]{@link https://pptr.dev/#?product=Puppeteer&version=v2.1.1&show=api-class-page} running WA Web
    */
   constructor(public page: Page) {
     this.page = page;
@@ -220,6 +245,38 @@ export class Whatsapp {
     ).then(_ => this.page.evaluate(
       () => {
         WAPI.onBattery(window["onBattery"]);
+      }));
+  }
+
+  /** @event Listens to when host device is plugged/unplugged
+   * @param fn callback
+   * @fires boolean true if plugged, false if unplugged
+   */
+  public async onPlugged(fn: (plugged: boolean) => void) {
+    this.page.exposeFunction('onPlugged', (plugged: boolean) =>
+      fn(plugged)
+    ).then(_ => this.page.evaluate(
+      () => {
+        WAPI.onPlugged(window["onPlugged"]);
+      }));
+  }
+
+  /**
+   * @event
+   * Requires a Story License Key 
+   * Listens to when a contact posts a new story.
+   * @param fn callback
+   * @fires e.g {
+   * from: '123456789@c.us'
+   * id: 'false_132234234234234@status.broadcast'
+   * }
+   */
+  public async onStory(fn: (story: any) => void) {
+    this.page.exposeFunction('onStory', (story: any) =>
+      fn(story)
+    ).then(_ => this.page.evaluate(
+      () => {
+        WAPI.onStory(window["onStory"]);
       }));
   }
 
@@ -302,7 +359,7 @@ export class Whatsapp {
  * @param {string} chatId '000000000000@c.us'
  * @param {string} vcard vcard as a string
  * @param {string} contactName The display name for the contact. CANNOT BE NULL OTHERWISE IT WILL SEND SOME RANDOM CONTACT FROM YOUR ADDRESS BOOK.
- * @param {string} contactNumber If supplied, this will be injected into the vcard (VERSION 3 ONLY FROM VCARDJS) with the whatsapp id to make it show up with the correct buttins on whatsapp. The format of this param should be including country code, without any other formating. e.g:
+ * @param {string} contactNumber If supplied, this will be injected into the vcard (VERSION 3 ONLY FROM VCARDJS) with the WA id to make it show up with the correct buttons on WA. The format of this param should be including country code, without any other formating. e.g:
  * `4477777777777`
  */
   public async sendVCard(chatId: string, vcard: string, contactName:string,  contactNumber?: string) {
@@ -368,9 +425,7 @@ export class Whatsapp {
   }
 
   public async forceRefocus() {
-    //255 is the address of 'use here'
-    //@ts-ignore
-    const useHere: string = await this.page.evaluate(() => { return window.l10n.localeStrings[window.l10n._locale.l][0][window.l10n.localeStrings['en']?.[0].findIndex((x:string)=>x.toLowerCase()=='use here') || 260] });
+    const useHere: string = await this.page.evaluate(()=>WAPI.getUseHereString());
     await this.page.waitForFunction(
       `[...document.querySelectorAll("div[role=button")].find(e=>{return e.innerHTML.toLowerCase()==="${useHere.toLowerCase()}"})`,
       { timeout: 0 }
@@ -434,7 +489,9 @@ export class Whatsapp {
 
 
   /**
-   * @event Fires callback with Chat object every time the host phone is added to a group.
+   * Fires callback with Chat object every time the host phone is added to a group.
+   * 
+   * @event 
    * @param to callback
    * @returns Observable stream of Chats
    */
@@ -453,7 +510,74 @@ export class Whatsapp {
   
 
   /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Fires callback with Chat object every time the host phone is added to a group.
+   * 
+   * @event 
+   * @param to callback
+   * @returns Observable stream of Chats
+   */
+  public onRemovedFromGroup(fn: (chat: Chat) => any) {
+    const funcName = "onRemovedFromGroup";
+    return this.page.exposeFunction(funcName, (chat: any) =>
+      fn(chat)
+    )
+      .then(_ => this.page.evaluate(
+        () => {
+        //@ts-ignore
+          WAPI.onRemovedFromGroup(window.onRemovedFromGroup);
+        }
+      ));
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Fires callback with the relevant chat id every time the user clicks on a chat. This will only work in headful mode.
+   * 
+   * @event 
+   * @param to callback
+   * @returns Observable stream of Chat ids.
+   */
+  public onChatOpened(fn: (chat: Chat) => any) {
+    const funcName = "onChatOpened";
+    return this.page.exposeFunction(funcName, (chat: any) =>
+      fn(chat)
+    )
+      .then(_ => this.page.evaluate(
+        () => {
+        //@ts-ignore
+          WAPI.onChatOpened(window.onChatOpened);
+        }
+      ));
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Fires callback with contact id when a new contact is added on the host phone.
+   * 
+   * @event 
+   * @param to callback
+   * @returns Observable stream of contact ids
+   */
+  public onContactAdded(fn: (chat: Chat) => any) {
+    const funcName = "onContactAdded";
+    return this.page.exposeFunction(funcName, (chat: any) =>
+      fn(chat)
+    )
+      .then(_ => this.page.evaluate(
+        () => {
+        //@ts-ignore
+          WAPI.onContactAdded(window.onContactAdded);
+        }
+      ));
+  }
+
+  /**
    * Sends a text message to given chat
+   * If you need to send a message to new numbers please see these instructions: https://github.com/open-wa/wa-automate-nodejs#starting-a-conversation
    * @param to chat id: xxxxx@us.c
    * @param content text message
    */
@@ -483,6 +607,27 @@ export class Whatsapp {
         return WAPI.sendMessageWithMentions(to, content);
       },
       { to, content }
+    );
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Sends a reply to given chat that includes mentions, replying to the provided replyMessageId.
+   * In order to use this method correctly you will need to send the text like this:
+   * "@4474747474747 how are you?"
+   * Basically, add a @ symbol before the number of the contact you want to mention.
+   * @param to chat id: xxxxx@us.c
+   * @param content text message
+   * @param replyMessageId id of message to reply to
+   */
+  public async sendReplyWithMentions(to: string, content: string, replyMessageId: string) {
+    return await this.page.evaluate(
+      ({ to, content, replyMessageId }) => {
+        WAPI.sendSeen(to);
+        return WAPI.sendReplyWithMentions(to, content, replyMessageId);
+      },
+      { to, content, replyMessageId }
     );
   }
 
@@ -576,11 +721,12 @@ export class Whatsapp {
     filename: string,
     caption: string,
     quotedMsgId?: string,
-    waitForId?: boolean
+    waitForId?: boolean,
+    ptt?:boolean
   ) {
     return await this.page.evaluate(
-      ({ to, base64, filename, caption, quotedMsgId, waitForId }) =>  WAPI.sendImage(base64, to, filename, caption, quotedMsgId, waitForId),
-      { to, base64, filename, caption, quotedMsgId, waitForId }
+      ({ to, base64, filename, caption, quotedMsgId, waitForId, ptt}) =>  WAPI.sendImage(base64, to, filename, caption, quotedMsgId, waitForId, ptt),
+      { to, base64, filename, caption, quotedMsgId, waitForId, ptt }
     );
   }
 
@@ -618,15 +764,15 @@ export class Whatsapp {
    * 
    * @param to string chatid
    * @param content string reply text
-   * @param quotedMsg string | Message the msg object or id to reply to.
+   * @param quotedMsgId string the msg id to reply to.
    * @param sendSeen boolean If set to true, the chat will 'blue tick' all messages before sending the reply
    * @returns Promise<string | boolean> false if didn't work, otherwise returns message id.
    */
-  public async reply(to: string, content: string, quotedMsg: any, sendSeen?: boolean) {
+  public async reply(to: string, content: string, quotedMsgId: string, sendSeen?: boolean) {
     if(sendSeen) await this.sendSeen(to);
     return await this.page.evaluate(
-      ({ to, content, quotedMsg }) =>WAPI.reply(to, content, quotedMsg),
-      { to, content, quotedMsg }
+      ({ to, content, quotedMsgId }) =>WAPI.reply(to, content, quotedMsgId),
+      { to, content, quotedMsgId }
     )
   }
 
@@ -650,6 +796,23 @@ export class Whatsapp {
   ) {
     return this.sendImage(to, base64, filename, caption, quotedMsgId, waitForId);
   }
+
+
+  /**
+   * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
+   * @param to chat id xxxxx@us.c
+   * @param base64 base64 data:image/xxx;base64,xxx
+   * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
+   * @returns Promise <boolean | string> This will either return true or the id of the message. It will return true after 10 seconds even if waitForId is true
+   */
+  public async sendPtt(
+    to: string,
+    base64: string,
+    quotedMsgId: string,
+  ) {
+    return this.sendImage(to, base64, 'ptt.ogg', '', quotedMsgId, true);
+  }
+
 
 
   /**
@@ -713,6 +876,8 @@ export class Whatsapp {
    * @param caption string xxxxx
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
    * @param requestConfig {} By default the request is a get request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
+   * @param waitForId boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retreive to the key of the message and this waiting may not be desirable for the majority of users.
+
    */
   public async sendFileFromUrl(
     to: string,
@@ -720,11 +885,12 @@ export class Whatsapp {
     filename: string,
     caption: string,
     quotedMsgId?: string,
-    requestConfig: any = {}
+    requestConfig: any = {},
+    waitForId?: boolean
   ) {
     try {
      const base64 = await getBase64(url, requestConfig);
-      return await this.sendFile(to,base64,filename,caption,quotedMsgId)
+      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId)
     } catch(error) {
       console.log('Something went wrong', error);
       return error;
@@ -735,18 +901,26 @@ export class Whatsapp {
  * Returns an object with all of your host device details
  */
   public async getMe(){
-    // return await this.page.evaluate(() => WAPI.getMe());
+    return await this.page.evaluate(() => WAPI.getMe());
     //@ts-ignore
-    return await this.page.evaluate(() => Store.Me.attributes);
+    // return await this.page.evaluate(() => Store.Me.attributes);
   }
 
-/**
- * Syncs contacts with phone. This promise does not resolve so it will instantly return true.
- */
-public async syncContacts(){
-  //@ts-ignore
-  return await this.page.evaluate(() => WAPI.syncContacts());
-}
+  /**
+   * Syncs contacts with phone. This promise does not resolve so it will instantly return true.
+   */
+  public async syncContacts(){
+    //@ts-ignore
+    return await this.page.evaluate(() => WAPI.syncContacts());
+  }
+
+   /**
+    * SEasily get the amount of messages loaded up in the session. This will allow you to determine when to clear chats/cache.
+    */
+   public async getAmountOfLoadedMessages(){
+     return await this.page.evaluate(() => WAPI.getAmountOfLoadedMessages());
+   }
+
 
   /**
    * Find any product listings of the given number. Use this to query a catalog
@@ -762,45 +936,6 @@ public async syncContacts(){
     );
   }
 
-  /**
-   * Post a status (story). Right now it is only white text on a black background. [Currently Paywalled](https://github.com/open-wa/wa-automate-nodejs#starting-a-conversation) [Only requires donation for immediate access - not membership]. Due for General Availability on 1st May 2020.
-   *
-   * @param text string The message you want to send on your story.
-   * @returns response e.g{ status: 200, t: 1586626288 } or false if you do not have access to this function
-   */
-  public async postStatus(text: string) {
-    return await this.page.evaluate(
-      ({ text }) => WAPI.postStatus(text, {}),
-      { text }
-    );
-  }
-
-/**
- * Consumes a list of id strings of statuses to delete.
- * @param statusesToDelete string [] | stringan array of ids of statuses to delete.
- * @returns boolean. True if it worked.
- */
-  public async deleteStatus(statusesToDelete: string | string []) {
-    return await this.page.evaluate(
-      ({ statusesToDelete }) => WAPI.deleteStatus(statusesToDelete),
-      { statusesToDelete }
-    );
-  }
-
-/**
- * Deletes all your existing statuses.
- * @returns boolean. True if it worked.
- */
-  public async deleteAllStatus() {
-    return await this.page.evaluate(() => WAPI.deleteAllStatus());
-  }
-
-    /**
-     * Retreives all existing statuses.
-     */
-  public async getMyStatusArray() {
-    return await this.page.evaluate(() => WAPI.getMyStatusArray());
-  }
 
   /**
    * Sends product with image to chat
@@ -981,7 +1116,7 @@ public async syncContacts(){
   
 /** Joins a group via the invite link, code, or message
  * @param link This param is the string which includes the invite link or code. The following work:
- * - Follow this link to join my WhatsApp group: https://chat.whatsapp.com/DHTGJUfFJAV9MxOpZO1fBZ
+ * - Follow this link to join my WA group: https://chat.whatsapp.com/DHTGJUfFJAV9MxOpZO1fBZ
  * - https://chat.whatsapp.com/DHTGJUfFJAV9MxOpZO1fBZ
  * - DHTGJUfFJAV9MxOpZO1fBZ
  * @returns Promise<string | boolean> Either false if it didn't work, or the group id.
@@ -1106,6 +1241,21 @@ public async contactUnblock(id: string) {
   }
 
   /**
+   * Retrieves the groups that you have in common with a contact
+   * @param contactId
+   * @returns Promise returning an array of common groups {
+   * id:string,
+   * title:string
+   * }
+   */
+  public async getCommonGroups(contactId: string) {
+    return await this.page.evaluate(
+      contactId => WAPI.getCommonGroups(contactId),
+      contactId
+    );
+  }
+
+  /**
    * Retrieves the epoch timestamp of the time the contact was last seen. This will not work if:
    * 1. They have set it so you cannot see their last seen via privacy settings.
    * 2. You do not have an existing chat with the contact.
@@ -1141,6 +1291,18 @@ public async contactUnblock(id: string) {
   public async sendSeen(chatId: string) {
     return await this.page.evaluate(
      chatId => WAPI.sendSeen(chatId),
+      chatId
+    );
+  }
+
+  
+  /**
+   * Sets a chat status to unread. May be useful to get host's attention
+   * @param chatId chat id: xxxxx@us.c
+   */
+  public async markAsUnread(chatId: string) {
+    return await this.page.evaluate(
+     chatId => WAPI.markAsUnread(chatId),
       chatId
     );
   }
@@ -1195,7 +1357,7 @@ public async getStatus(contactId: string) {
   }
 
   /**
-    * Delete the conversation from your whatsapp
+    * Delete the conversation from your WA
    * @param chatId
    * @returns boolean
    */
@@ -1257,7 +1419,7 @@ public async getStatus(contactId: string) {
   }
 
   /**
-   * Checks if a number is a valid whatsapp number
+   * Checks if a number is a valid WA number
    * @param contactId, you need to include the @c.us at the end.
    * @returns contact detial as promise
    */
@@ -1296,11 +1458,11 @@ public async getStatus(contactId: string) {
    * @returns list of messages
    */
   public async getAllUnreadMessages() {
-    return JSON.parse(await this.page.evaluate(() => WAPI.getAllUnreadMessages()));
+    return await this.page.evaluate(() => WAPI.getAllUnreadMessages());
   }
 
   /**
-   * Retrieves all unread Messages as indicated by the red dots in whatsapp web. This returns an array of objects and are structured like so:
+   * Retrieves all unread Messages as indicated by the red dots in WA web. This returns an array of objects and are structured like so:
    * ```javascript
    * [{
    * "id": "000000000000@g.us", //the id of the chat
@@ -1476,6 +1638,8 @@ public async getStatus(contactId: string) {
   }
 
   /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
   * Change who can and cannot edit a groups details
   * @param groupId '0000000000-00000000@g.us' the group id.
   * @param onlyAdmins boolean set to true if you want only admins to be able to speak in this group. false if you want to allow everyone to speak in the group
@@ -1500,6 +1664,32 @@ public async getStatus(contactId: string) {
   }
 
   /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Set the wallpaper background colour
+   * @param {string} hex '#FFF123'
+  */
+  public async setChatBackgroundColourHex(hex: string) {
+    return await this.page.evaluate(
+      (hex) => WAPI.setChatBackgroundColourHex(hex),
+      hex
+    );
+  }
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Start dark mode
+   * @param {boolean} activate true to activate dark mode, false to deactivate
+  */
+  public async darkMode(activate: boolean) {
+    return await this.page.evaluate(
+      (activate) => WAPI.darkMode(activate),
+      activate
+    );
+  }
+
+  /**
    * Sends a sticker from a given URL
    * @param to: The recipient id.
    * @param url: The url of the image
@@ -1513,6 +1703,27 @@ public async getStatus(contactId: string) {
        console.log('Something went wrong', error);
        return error;
      }
+  }
+
+  /**
+   * This allows you to get a single property of a single object from the session. This limints the amouunt of data you need to sift through, reduces congestion between your process and the session and the flexibility to build your own specific getters.
+   * 
+   * Example - get message read state (ack):
+   * 
+   * ```javascript
+   * const ack  = await client.getSingleProperty('Msg',"true_12345678912@c.us_9C4D0965EA5C09D591334AB6BDB07FEB",'ack')
+   * ```
+   * @param namespace
+   * @param id id of the object to get from the specific namespace
+   * @param property the single property key to get from the object.
+   * @returns any If the property or the id cannot be found, it will return a 404
+   */
+  public async getSingleProperty(namespace: namespace, id: string, property : string) {
+    return await this.page.evaluate(
+      ({ namespace, id, property }) => WAPI.getSingleProperty(namespace, id, property),
+      { namespace, id, property }
+    );
+
   }
 
   public async injectJsSha(){
@@ -1550,6 +1761,223 @@ public async getStatus(contactId: string) {
       return false;
     }
   }
+  
+  /**
+   * [REQUIRES A TEST STORY LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Sends a formatted text story.
+   * @param text The text to be displayed in the story 
+   * @param textRgba The colour of the text in the story in hex format, make sure to add the alpha value also. E.g "#FF00F4F2"
+   * @param backgroundRgba  The colour of the background in the story in hex format, make sure to add the alpha value also. E.g "#4FF31FF2"
+   * @param font The font of the text to be used in the story. This has to be a number. Each number refers to a specific predetermined font. Here are the fonts you can choose from:
+   * 0: Sans Serif
+   * 1: Serif
+   * 2: [Norican Regular](https://fonts.google.com/specimen/Norican)
+   * 3: [Bryndan Write](https://www.dafontfree.net/freefonts-bryndan-write-f160189.htm)
+   * 4: [Bebasneue Regular](https://www.dafont.com/bebas-neue.font)
+   * 5: [Oswald Heavy](https://www.fontsquirrel.com/fonts/oswald)
+   * @returns Promise<string | boolean> returns status id if it worked, false if it didn't
+   */
+  public async postTextStatus(text: string, textRgba: string, backgroundRgba: string, font: number){
+    return await this.page.evaluate(
+      ({ text, textRgba, backgroundRgba, font }) => WAPI.postTextStatus(text, textRgba, backgroundRgba, font),
+      { text, textRgba, backgroundRgba, font }
+    );
+  }
+
+  /**
+   * [REQUIRES AN IMAGE STORY LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Posts an image story.
+   * @param data data uri string `data:[<MIME-type>][;charset=<encoding>][;base64],<data>`
+   * @param caption The caption for the story 
+   * @returns Promise<string | boolean> returns status id if it worked, false if it didn't
+   */
+  public async postImageStatus(data: string, caption: string){
+    return await this.page.evaluate(
+      ({data, caption}) => WAPI.postImageStatus(data, caption),
+      { data, caption }
+    );
+  }
+
+  /**
+   * [REQUIRES A VIDEO STORY LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Posts a video story.
+   * @param data data uri string `data:[<MIME-type>][;charset=<encoding>][;base64],<data>`
+   * @param caption The caption for the story 
+   * @returns Promise<string | boolean> returns status id if it worked, false if it didn't
+   */
+  public async postVideoStatus(data: string, caption: string){
+    return await this.page.evaluate(
+      ({data, caption}) => WAPI.postVideoStatus(data, caption),
+      { data, caption }
+    );
+  }
+
+
+/**
+ * Consumes a list of id strings of statuses to delete.
+ * @param statusesToDelete string [] | stringan array of ids of statuses to delete.
+ * @returns boolean. True if it worked.
+ */
+  public async deleteStatus(statusesToDelete: string | string []) {
+    return await this.page.evaluate(
+      ({ statusesToDelete }) => WAPI.deleteStatus(statusesToDelete),
+      { statusesToDelete }
+    );
+  }
+
+/**
+ * Deletes all your existing statuses.
+ * @returns boolean. True if it worked.
+ */
+  public async deleteAllStatus() {
+    return await this.page.evaluate(() => WAPI.deleteAllStatus());
+  }
+
+    /**
+     * Retreives all existing statuses.
+     */
+  public async getMyStatusArray() {
+    return await this.page.evaluate(() => WAPI.getMyStatusArray());
+  }
+
+    /**
+     * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+     * 
+     * Clears all chats of all messages. This does not delete chats. Please be careful with this as it will remove all messages from whatsapp web and the host device. This feature is great for privacy focussed bots.
+     */
+  public async clearAllChats() {
+    return await this.page.evaluate(() => WAPI.clearAllChats());
+  }
+  
+
+    /**
+     * This simple function halves the amount of messages in your session message cache. This does not delete messages off your phone. If over a day you've processed 4000 messages this will possibly result in 4000 messages being present in your session.
+     * Calling this method will cut the message cache to 2000 messages, therefore reducing the memory usage of your process.
+     * You should use this in conjunction with `getAmountOfLoadedMessages` to intelligently control the session message cache.
+     */
+  public async cutMsgCache() {
+    return await this.page.evaluate(() => WAPI.cutMsgCache());
+  }
+  
+  /**
+   * Download profile pics from the message object.
+   * ```javascript
+   *  const filename = `profilepic_${message.from}.jpeg`;
+   *  const data = await client.downloadProfilePicFromMessage(message);
+   *  const dataUri = `data:image/jpeg;base64,${data}`;
+   *  fs.writeFile(filename, mData, 'base64', function(err) {
+   *    if (err) {
+   *      return console.log(err);
+   *    }
+   *    console.log('The file was saved!');
+   *  });
+   * ```
+   */
+  public async downloadProfilePicFromMessage(message: Message) {
+    return await this.downloadFileWithCredentials(message.sender.profilePicThumbObj.imgFull);
+  }
+
+  /**
+   * Download via the browsers authenticated session via URL.
+   * @returns base64 string (non-data uri)
+   */
+  public async downloadFileWithCredentials(url: string){
+    if(!url) throw new Error('Missing URL');
+    return await this.page.evaluate(({ url }) => WAPI.downloadFileWithCredentials(url),{url});
+  }
+  
+
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt)
+   * 
+   * Sets the profile pic of the host number.
+   * @param data string data uri image string.
+   * @returns Promise<boolean> success if true
+   */
+  public async setProfilePic(data: string){
+    return await this.page.evaluate(({ data }) => WAPI.setProfilePic(data),{data});
+  }
+
+  /**
+   * This exposes a simple express middlware that will allow users to quickly boot up an api based off this client. Checkout demo/index.ts for an example
+   * How to use the middleware:
+   * 
+   * ```javascript
+   * 
+   * import { create } from '@open-wa/wa-automate';
+   * const express = require('express')
+   * const app = express()
+   * app.use(express.json())
+   * const PORT = 8082;
+   * 
+   * function start(client){
+   *   app.use(client.middleware);
+   *   app.listen(PORT, function () {
+   *     console.log(`\n• Listening on port ${PORT}!`);
+   *   });
+   *   ...
+   * }
+   * 
+   * 
+   * create({
+   *   sessionId:'session1'
+   * }).then(start)
+   * 
+   * ```
+   * 
+   * All requests need to be `POST` requests. You use the API the same way you would with `client`. The method can be the path or the method param in the post body. The arguments for the method should be properly ordered in the args array in the JSON post body.
+   * 
+   * Example:
+   * 
+   * ```javascript
+   *   await client.sendText('4477777777777@c.us','test')
+   *   //returns "true_4477777777777@c.us_3EB0645E623D91006252"
+   * ```
+   * as a request with a path:
+   * 
+   * ```javascript
+   * const axios = require('axios').default;
+   * axios.post('localhost:8082/sendText', {
+   *     args: [
+   *        "4477777777777@c.us",    
+   *        "test"    
+   *         ]
+   *   })
+   * ```
+   * 
+   * or as a request without a path:
+   * 
+   * ```javascript
+   * const axios = require('axios').default;
+   * axios.post('localhost:8082', {
+   *     method:'sendText',
+   *     args: [
+   *        "4477777777777@c.us",    
+   *        "test"   
+   *         ]
+   * })
+   * ```
+   */
+  middleware = async (req,res,next) => {
+    if(req.method==='POST') {
+      let {method,args} = req.body
+      if(!args) args = [];
+      const m = method || req.path.replace('/','');
+      if(this[m]){
+        const response = await this[m](...args);
+        return res.send({
+          success:true,
+          response
+        })
+      }
+      return res.status(404).send('Cannot find method')
+    }
+    return next();
+  }
+
 }
 
 export { useragent } from '../config/puppeteer.config'

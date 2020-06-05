@@ -1,4 +1,4 @@
-import { Whatsapp } from '../..';
+import { Client } from '../..';
 
 export { Chat } from './chat';
 export { Contact } from './contact';
@@ -39,7 +39,7 @@ export enum Events {
 };
 
 /**
- * WhatsApp state
+ * Session state
  * @readonly
  * @enum {string}
  */
@@ -102,9 +102,43 @@ export interface ConfigObject {
      *          console.log(sessionId, sessionData)
      *      })
      * ```
+     *  NOTE: You can set sessionData as an evironmental variable also! The variable name has to be [sessionId (default = 'session) in all caps]_DATA_JSON. You have to make sure to surround your session data with single quotes to maintain the formatting.
      * 
+     * For example:
+     * 
+     * sessionId = 'session'
+     * 
+     * To set env var:
+     * ```bash
+     *    export SESSION_DATA_JSON=`...`
+     * ```
+     * where ... is copied from session.data.json
+     * Again - YOU NEED THE ' as it maintains the formatting from the json file. Otherwise it will not work.
+     * Setting the sessionData in the environmental variable will override the sessionData object in the config.
      */
     sessionData ?: SessionData,
+    /**
+     * ALPHA EXPERIMENTAL FEATURE! DO NOT USE IN PRODUCTION, REQUIRES TESTING.
+     * 
+     * Learn more:
+     * 
+     * https://pptr.dev/#?product=Puppeteer&version=v3.1.0&show=api-puppeteerconnectoptions
+     * 
+     * https://medium.com/@jaredpotter1/connecting-puppeteer-to-existing-chrome-window-8a10828149e0
+     */
+    browserWSEndpoint ?: string,
+    /**
+     * This flag allows you to disable or enable the use of the puppeteer stealth plugin. It is a good idea to use it, however it can cause issues sometimes. Set this to false if you are experiencing `browser.setMaxListeneres` issue. For now the default for this is false.
+     */
+    useStealth ?: boolean,
+    /**
+     * The path relative to the current working directory (i.e where you run the command to start your process). This will be used to store and read your `.data.json` files. defualt to ''
+     */
+    sessionDataPath ?: string,
+    /**
+     * Disable cors see: https://pptr.dev/#?product=Puppeteer&version=v3.0.4&show=api-pagesetbypasscspenabled If you are having an issue with sending media try to set this to true. Otherwise leave it set to falsedefualt to false
+     */
+    bypassCSP ?: boolean,
     /**
      * This allows you to pass any array of custom chrome/chromium argument strings to the puppeteer instance.
      * You can find all possible arguements [here](https://peter.sh/experiments/chromium-command-line-switches/).
@@ -121,26 +155,17 @@ export interface ConfigObject {
     sessionId ?: string,
     /**
      * In order to unlock the functionality to send texts to unknown numbers, you need an License key.
-     * One License Key is valid for each number. Each License Key is £5 per month or £50 per year.
+     * One License Key is valid for each number. Each License Key is £10 per month or £100 per year.
      * 
-     * For now the process happens through [Buy Me A Coffee](https://www.buymeacoffee.com/smashah) (BMAC)
-     * 
-     * How to get an License key:
-     * 1. Go to https://www.buymeacoffee.com/smashah
-     * 2. Click on 'Membership'.
-     * 3. Select your payment preference (monthly/annually)
-     * 5. Add the number you want to assign to the License Key in the notes, along with the use case for this functionality.
-     * 6. Select "Make this message private."
-     * 7. Complete the process for membership.
-     * 8. I will then send you the License key via email.
+     * Please check README for instructions on how to get a license key.
      * 
      * Notes:
-     * 1. You can change the number assigned to that License Key at any time, just message me the new number on the private discord channel or on BMAC.
+     * 1. You can change the number assigned to that License Key at any time, just message me the new number on the private discord channel.
      * 2. In order to cancel your License Key, simply stop your membership.
      */
-    licenseKey ?: string,
+    licenseKey ?: string | string[],
     /**
-     * You may set a custom user agent to prevent detection by WhatsApp. However, due to recent developments, this is not really neccessary any more.
+     * You may set a custom user agent. However, due to recent developments, this is not really neccessary any more.
      */
     customUserAgent ?: string,
     /**
@@ -149,13 +174,21 @@ export interface ConfigObject {
      */
     devtools ?: boolean | DevTools,
     /**
-     * Setting this to true will block any network calls to WhatsApp's crash log servers. This should keep anything you do under the radar.
+     * Setting this to true will block any network calls to crash log servers. This should keep anything you do under the radar. default is true
      */
     blockCrashLogs ?: boolean,
     /**
      * Setting this to false turn off the cache. This may improve memory usage.
      */
     cacheEnabled ?: boolean,
+    /**
+     * This is the specific browser revision to be downlaoded and used. You can find browser revision strings here: http://omahaproxy.appspot.com/
+     * Learn more about it here: https://github.com/puppeteer/puppeteer/blob/master/docs/api.md#class-browserfetcher
+     * If you're having trouble with sending images, try '737027'.
+     * If you go too far back things will start breaking !!!!!!
+     * NOTE: THIS WILL OVERRIDE useChrome and executablePath. ONLY USE THIS IF YOU KNOW WHAT YOU ARE DOING.
+     */
+    browserRevision ?: string,
     /**
      * Setting this to true will throw an error if a session is not able to get a QR code or is unable to restart a session.
      */
@@ -175,7 +208,7 @@ export interface ConfigObject {
     /**
      * This determines how long the process should wait for a QR code to be scanned before killing the process entirely.
      */
-    killTimer ?: number,
+    qrTimeout ?: number,
     /**
      * Some features, like video upload, do not work without a chrome instance. Puppeteer only provides a chromium instance out of the box. Set this to the path of your chrome instance or you can use `useChrome:true` to automatically detect a chrome instance for you.
      */
@@ -189,10 +222,14 @@ export interface ConfigObject {
      */
     proxyServerCredentials?: ProxyServerCredentials,
     /**
+     * If true, skips logging the QR Code to the console. Default is false.
+     */
+    qrLogSkip?: boolean;
+    /**
      * If set, the program will try to recreate itself when the page crashes. You have to pass the function that you want called upon restart. Please note that when the page crashes you may miss some messages.
      * E.g:
      * ```javascript
-     * const start  = async (client: Whatsapp) => {...}
+     * const start  = async (client: Client) => {...}
      * create({
      * ...
      * restartOnCrash: start,
@@ -200,12 +237,26 @@ export interface ConfigObject {
      * })
      * ```
      */
-    restartOnCrash ?: (value: Whatsapp) => any | Function,
+    restartOnCrash ?: (value: Client) => any | Function,
     /**
      * default: false
      * Setting this to true will simplify logs for use within docker containers by disabling spins (will still print raw messages).
      */
-    disableSpins ?: boolean
+    disableSpins ?: boolean,
+    /**
+     * default: false
+     * If true, this will log any console messages from the browser.
+     */
+    logConsole ?: boolean
+    /**
+     * default: false
+     * If true, this will log any error messages from the browser instance
+     */
+    logConsoleErrors ?: boolean,
+    /**
+    *This determines how long the process should wait for the session authentication. If exceeded, checks if phone is out of reach (turned of or without internet connection) and throws an error.
+    */
+    authTimeout?: number;
     // @private
     [x: string]: any 
 }
