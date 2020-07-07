@@ -11,7 +11,7 @@ let globalClient:Client;
 const express = require('express')
 
 const app = express()
-app.use(express.json())
+app.use(express.json({limit: '200mb'})) //add the limit option so we can send base64 data through the api
 
 const PORT = 8082;
 
@@ -43,7 +43,7 @@ ev.on('sessionData.**', async (sessionData, sessionId) =>{
 })
 
 async function start(client: Client) {
-  app.use(client.middleware);
+  app.use(client.middleware(true));
 
 app.listen(PORT, function () {
   console.log(`\n• Listening on port ${PORT}!`);
@@ -62,18 +62,23 @@ app.listen(PORT, function () {
   // console.log("TCL: start -> newMessages", newMessages)
   // console.log("TCL: getAllNewMessages ->", newMessages.length, newMessages[0]);
 
-  // client.onAck((c:any) => console.log(c.id._serialized,c.body,c.ack));
+  client.onAck((c:any) => console.log(c.id,c.body,c.ack));
 
     client.onAddedToGroup(newGroup => console.log('Added to new Group', newGroup.id));
 
     client.onIncomingCall(call=>console.log('newcall',call));
+
+
+    const prods = await client.getBusinessProfilesProducts(me.wid)
+    console.log(prods)
+
 
   // client.onParticipantsChanged("XXXXXXXX-YYYYYYYY@g.us", (participantChangedEvent:any) => console.log("participant changed for group", participantChangedEvent));
   
   //Returns 'CONNECTED' or 'TIMEOUT' or 'CONFLICT' (if user opens whatsapp web somewhere else)
   client.onStateChanged(state=>{
     console.log('statechanged', state)
-    if(state==="CONFLICT") client.forceRefocus();
+    if(state==="CONFLICT" || state==="UNLAUNCHED") client.forceRefocus();
   });
 
   // setTimeout(_=> client.kill(), 3000);
@@ -94,6 +99,7 @@ app.listen(PORT, function () {
     if (message.mimetype) {
       const filename = `${message.t}.${mime.extension(message.mimetype)}`;
       const mediaData = await decryptMedia(message, uaOverride);
+
       // you can send a file also with sendImage or await client.sendFile
       // await client.sendImage(
       //   message.from,
@@ -166,8 +172,10 @@ create({
   throwErrorOnTosBlock:true,
   qrTimeout:40,
   authTimeout:40,
+  killProcessOnBrowserClose: true,
   autoRefresh:true, //default to true
   qrRefreshS:15, //please note that if this is too long then your qr code scan may end up being invalid. Generally qr codes expire every 15 seconds.
+  safeMode: true
   // cacheEnabled:false,
   // devtools:true,
   //OR

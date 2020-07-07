@@ -43,7 +43,7 @@ export enum Events {
  * @readonly
  * @enum {string}
  */
-export enum WAState {
+export enum STATE {
     CONFLICT = 'CONFLICT',
     CONNECTED = 'CONNECTED',
     DEPRECATED_VERSION = 'DEPRECATED_VERSION',
@@ -257,6 +257,18 @@ export interface ConfigObject {
     *This determines how long the process should wait for the session authentication. If exceeded, checks if phone is out of reach (turned of or without internet connection) and throws an error.
     */
     authTimeout?: number;
+    /**
+     * Setting this to `true` will kill the whole process when the client is disconnected from the page or if the browser is closed. defaults to `true`
+     */
+    killProcessOnBrowserClose ?: boolean;
+    /**
+     * If true, client will check if the page is valid before each command. If page is not valid, it will throw an error.
+     */
+    safeMode ?: boolean;
+    /**
+     * If true, the process will not save a data.json file. This means that sessions will not be saved and you will need to pass sessionData as a config param or create the session data.json file yourself
+     */
+    skipSessionSave ?: boolean;
     // @private
     [x: string]: any 
 }
