@@ -3,10 +3,11 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>Call | @open-wa/wa-automate - v1.9.96</title>
-	<meta name="description" content="Documentation for @open-wa/wa-automate - v1.9.96">
+	<title>Call | @open-wa/wa-automate - v2.0.29</title>
+	<meta name="description" content="Documentation for @open-wa/wa-automate - v2.0.29">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
+	<link rel="stylesheet" href="../assets/css/pages.css">
 </head>
 <body>
 <header>
@@ -22,7 +23,7 @@
 						<li class="state loading">Preparing search index...</li>
 						<li class="state failure">The search index is not available</li>
 					</ul>
-					<a href="../index.html" class="title">@open-wa/wa-automate - v1.9.96</a>
+					<a href="../index.html" class="title">@open-wa/wa-automate - v2.0.29</a>
 				</div>
 				<div class="table-cell" id="tsd-widgets">
 					<div id="tsd-filter">
@@ -38,10 +39,6 @@
 							</div>
 							<input type="checkbox" id="tsd-filter-inherited" checked />
 							<label class="tsd-widget" for="tsd-filter-inherited">Inherited</label>
-							<input type="checkbox" id="tsd-filter-externals" checked />
-							<label class="tsd-widget" for="tsd-filter-externals">Externals</label>
-							<input type="checkbox" id="tsd-filter-only-exported" />
-							<label class="tsd-widget" for="tsd-filter-only-exported">Only exported</label>
 						</div>
 					</div>
 					<a href="#" class="tsd-widget menu no-caption" data-toggle="menu">Menu</a>
@@ -103,7 +100,7 @@
 					<div class="tsd-signature tsd-kind-icon">can<wbr>Handle<wbr>Locally<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L7">api/model/call.ts:7</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L25">api/model/call.ts:25</a></li>
 						</ul>
 					</aside>
 				</section>
@@ -113,9 +110,14 @@
 					<div class="tsd-signature tsd-kind-icon">id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L2">api/model/call.ts:2</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L8">api/model/call.ts:8</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The id of the call</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="isgroup" class="tsd-anchor"></a>
@@ -123,9 +125,14 @@
 					<div class="tsd-signature tsd-kind-icon">is<wbr>Group<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L6">api/model/call.ts:6</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L24">api/model/call.ts:24</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Whether or not the call is a group call</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="isvideo" class="tsd-anchor"></a>
@@ -133,9 +140,14 @@
 					<div class="tsd-signature tsd-kind-icon">is<wbr>Video<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L5">api/model/call.ts:5</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L20">api/model/call.ts:20</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Whether or not the call is a video call</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="offertime" class="tsd-anchor"></a>
@@ -143,9 +155,14 @@
 					<div class="tsd-signature tsd-kind-icon">offer<wbr>Time<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L4">api/model/call.ts:4</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L16">api/model/call.ts:16</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The epoch timestamp of the call. You will have to multiply this by 1000 to get the actual epoch timestamp</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="outgoing" class="tsd-anchor"></a>
@@ -153,29 +170,44 @@
 					<div class="tsd-signature tsd-kind-icon">outgoing<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L8">api/model/call.ts:8</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L29">api/model/call.ts:29</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The direction of the call.</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="participants" class="tsd-anchor"></a>
 					<h3>participants</h3>
-					<div class="tsd-signature tsd-kind-icon">participants<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">[</span><span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">]</span></div>
+					<div class="tsd-signature tsd-kind-icon">participants<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">[</span><a href="../globals.html#contactid" class="tsd-signature-type">ContactId</a><span class="tsd-signature-symbol">]</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L10">api/model/call.ts:10</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L34">api/model/call.ts:34</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The participants on the call</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="peerjid" class="tsd-anchor"></a>
 					<h3>peer<wbr>Jid</h3>
-					<div class="tsd-signature tsd-kind-icon">peer<wbr>Jid<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<div class="tsd-signature tsd-kind-icon">peer<wbr>Jid<span class="tsd-signature-symbol">:</span> <a href="id.html" class="tsd-signature-type">Id</a></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L3">api/model/call.ts:3</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L12">api/model/call.ts:12</a></li>
 						</ul>
 					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The id of the account calling</p>
+						</div>
+					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
 					<a name="webclientshouldhandle" class="tsd-anchor"></a>
@@ -183,7 +215,7 @@
 					<div class="tsd-signature tsd-kind-icon">web<wbr>Client<wbr>Should<wbr>Handle<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/9794ffc/src/api/model/call.ts#L9">api/model/call.ts:9</a></li>
+							<li>Defined in <a href="https://github.com/open-wa/wa-automate-nodejs/blob/d732f8c3/src/api/model/call.ts#L30">api/model/call.ts:30</a></li>
 						</ul>
 					</aside>
 				</section>
@@ -192,6 +224,75 @@
 		<div class="col-4 col-menu menu-sticky-wrap menu-highlight">
 			<nav class="tsd-navigation primary">
 				<ul>
+					<li class="label pp-nav pp-group">
+						<span>Getting <wbr>Started</span>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/Getting Started/installation.html">Installation</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/Getting Started/quick-run.html">Easy API</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/Getting Started/docker.html">Docker</a>
+					</li>
+					<li class="label pp-nav pp-group">
+						<span>The <wbr>Client</span>
+					</li>
+					<li class=" pp-nav pp-page pp-parent">
+						<a href="../pages/The Client/the-client.html">Creating a <wbr>Client</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/The Client/config-object.html">The <wbr>Config <wbr>Object</a>
+					</li>
+					<li class=" pp-nav pp-page pp-parent">
+						<a href="../pages/The Client/launch-events.html">Launch <wbr>Events</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/The Client/licensed-features.html">Licensed <wbr>Features</a>
+					</li>
+					<li class="label pp-nav pp-group">
+						<span>How to</span>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/send-messages.html">Send <wbr>Messages</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/receive-messages.html">Receive <wbr>Messages</a>
+					</li>
+					<li class=" pp-nav pp-page pp-parent">
+						<a href="../pages/How to/send-files.html">Send <wbr>Files</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/location.html">Sending &amp; <wbr>Receiving <wbr>Location</a>
+					</li>
+					<li class=" pp-nav pp-page pp-parent">
+						<a href="../pages/How to/groups.html">Groups</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/react-to-group-events.html">React to group events</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/detect-logout.html">Detect a logout</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/handle-errors.html">Handle <wbr>Errors</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/decrypt-media.html">Decrypt <wbr>Media</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/incoming-calls.html">Detect <wbr>Incoming <wbr>Calls</a>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/How to/misc.html">More <wbr>Examples</a>
+					</li>
+					<li class="label pp-nav pp-group">
+						<span>Advanced</span>
+					</li>
+					<li class=" pp-nav pp-page">
+						<a href="../pages/Advanced/best-practices.html">Best <wbr>Practices</a>
+					</li>
 					<li class="globals  ">
 						<a href="../globals.html"><em>Globals</em></a>
 					</li>
@@ -245,21 +346,16 @@
 		<h2>Legend</h2>
 		<div class="tsd-legend-group">
 			<ul class="tsd-legend">
-				<li class="tsd-kind-constructor tsd-parent-kind-class"><span class="tsd-kind-icon">Constructor</span></li>
-				<li class="tsd-kind-property tsd-parent-kind-class"><span class="tsd-kind-icon">Property</span></li>
-				<li class="tsd-kind-method tsd-parent-kind-class"><span class="tsd-kind-icon">Method</span></li>
-			</ul>
-			<ul class="tsd-legend">
-				<li class="tsd-kind-property tsd-parent-kind-class tsd-is-inherited"><span class="tsd-kind-icon">Inherited property</span></li>
-				<li class="tsd-kind-method tsd-parent-kind-class tsd-is-inherited"><span class="tsd-kind-icon">Inherited method</span></li>
-			</ul>
-			<ul class="tsd-legend">
 				<li class="tsd-kind-property tsd-parent-kind-interface"><span class="tsd-kind-icon">Property</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-method tsd-parent-kind-class"><span class="tsd-kind-icon">Method</span></li>
 			</ul>
 		</div>
 	</div>
 </footer>
 <div class="overlay"></div>
 <script src="../assets/js/main.js"></script>
+<script>if (location.protocol == 'file:') document.write('<script src="../assets/js/search.json"><' + '/script>');</script>
 </body>
 </html>
