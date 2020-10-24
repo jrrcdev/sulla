@@ -13,6 +13,7 @@ const parseFunction = require('parse-function'),
 pkg = require('../../package.json'),
 datauri = require('datauri'),
 fs = require('fs'),
+isUrl = require('is-url'),
 isDataURL = (s: string) => !!s.match(/^data:((?:\w+\/(?:(?!;).)+)?)((?:;[\w\W]*?[^;])*),(.+)$/g);
 import treekill from 'tree-kill';
 import { SessionInfo } from './model/sessionInfo';
@@ -33,6 +34,7 @@ export enum namespace {
 export enum SimpleListener {
   Message = 'onMessage',
   AnyMessage = 'onAnyMessage',
+  MessageDeleted = 'onMessageDeleted',
   Ack = 'onAck',
   AddedToGroup = 'onAddedToGroup',
   Battery = 'onBattery',
@@ -132,6 +134,7 @@ declare module WAPI {
   const addParticipant: (groupId: string, contactId: string) => void;
   const sendGiphyAsSticker: (chatId: string, url: string) => Promise<any>;
   const getMessageById: (mesasgeId: string) => Message;
+  const getMyLastMessage: (chatId: string) => Message;
   const getStickerDecryptable: (mesasgeId: string) => Message | boolean;
   const forceStaleMediaUpdate: (mesasgeId: string) => Message | boolean;
   const setMyName: (newName: string) => Promise<boolean>;
@@ -143,7 +146,7 @@ declare module WAPI {
   const getCommonGroups: (contactId: string) => Promise<{id:string,title:string}[]>;
   const forceUpdateLiveLocation: (chatId: string) => Promise<LiveLocationChangedEvent []> | boolean;
   const setGroupIcon: (groupId: string, imgData: string) => Promise<boolean>;
-  const getGroupAdmins: (groupId: string) => Promise<Contact[]>;
+  const getGroupAdmins: (groupId: string) => Promise<ContactId[]>;
   const removeParticipant: (groupId: string, contactId: string) => Promise<boolean>;
   const addOrRemoveLabels: (label: string, id: string, type: string) => Promise<boolean>;
   const promoteParticipant: (groupId: string, contactId: string) => Promise<boolean>;
@@ -421,10 +424,22 @@ export class Client {
    * 
    * @event 
    * @param to callback
-   * @fires Message 
+   * @fires [[Message]] 
    */
   public async onAnyMessage(fn: (message: Message) => void) {
     return this.registerListener(SimpleListener.AnyMessage, fn);
+  }
+  /**
+   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+   * 
+   * Listens to when a message is deleted by a recipient or the host account
+
+   * @event 
+   * @param fn callback
+   * @fires [[Message]]
+   */
+  public async onMessageDeleted(fn: (message: Message) => void) {
+    return this.registerListener(SimpleListener.MessageDeleted, fn);
   }
 
   /** 
@@ -949,7 +964,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Sends a image to given chat, with caption or not, using base64
    * @param to chat id xxxxx@c.us
-   * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send.
+   * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
    * @param waitForKey boolean default: false set this to true if you want to wait for the id of the message. By default this is set to false as it will take a few seconds to retreive to the key of the message and this waiting may not be desirable for the majority of users.
@@ -970,7 +985,9 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
         let relativePath = path.join(path.resolve(process.cwd(),file|| ''));
         if(fs.existsSync(file) || fs.existsSync(relativePath)) {
           file = await datauri(fs.existsSync(file)  ? file : relativePath);
-        } else throw new Error('Cannot find file. Make sure the file reference is relative or valid DataURL')
+        } else if(isUrl(file)){
+          return await this.sendFileFromUrl(to,file,filename,caption,quotedMsgId,{},waitForId,ptt);
+        } else throw new Error('Cannot find file. Make sure the file reference is relative, a valid URL or a valid DataURL')
       }
     
    const err = [
@@ -1037,7 +1054,7 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   /**
    * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
    * @param to chat id xxxxx@c.us
-   * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
+   * @param file DataURL data:image/xxx;base64,xxx or the RELATIVE (should start with `./` or `../`) path of the file you want to send. With the latest version, you can now set this to a normal URL (for example [GET] `https://file-examples-com.github.io/uploads/2017/10/file_example_JPG_2500kB.jpg`).
    * @param filename string xxxxx
    * @param caption string xxxxx
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
@@ -1050,14 +1067,15 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     filename: string,
     caption: Content,
     quotedMsgId?: MessageId,
-    waitForId?: boolean
+    waitForId?: boolean,
+    ptt?:boolean
   ) {
-    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId);
+    return this.sendImage(to, file, filename, caption, quotedMsgId, waitForId, ptt);
   }
 
 
   /**
-   * Sends a file to given chat, with caption or not, using base64. This is exactly the same as sendImage
+   * Attempts to send a file as a voice note. Useful if you want to send an mp3 file.
    * @param to chat id xxxxx@c.us
    * @param base64 base64 data:image/xxx;base64,xxx or the path of the file you want to send.
    * @param quotedMsgId string true_0000000000@c.us_JHB2HB23HJ4B234HJB to send as a reply to a message
@@ -1070,6 +1088,18 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
   ) {
     return this.sendImage(to, file, 'ptt.ogg', '', quotedMsgId, true, true);
   }
+  
+  /**
+   * Alias for [[sendPtt]]
+   */
+  public async sendAudio(
+    to: ChatId,
+    file: DataURL | FilePath,
+    quotedMsgId: MessageId,
+  ) {
+    return this.sendPtt(to, file,quotedMsgId);
+  }
+
 
 
 
@@ -1112,12 +1142,12 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     if (n) {
       const r = `https://i.giphy.com/${n[1]}.mp4`;
       const filename = `${n[1]}.mp4`
-      const base64 = await getDUrl(r);
+      const dUrl = await getDUrl(r);
       return await this.pup(
         ({ to, base64, filename, caption }) => {
-          WAPI.sendVideoAsGif(base64, to, filename, caption);
+          WAPI.sendVideoAsGif(dUrl, to, filename, caption);
         },
-        { to, base64, filename, caption }
+        { to, dUrl, filename, caption }
       ) as Promise<MessageId>;
     } else {
       console.log('something is wrong with this giphy link');
@@ -1144,12 +1174,12 @@ public async onLiveLocation(chatId: ChatId, fn: (liveLocationChangedEvent: LiveL
     caption: Content,
     quotedMsgId?: MessageId,
     requestConfig: any = {},
-    waitForId?: boolean
+    waitForId?: boolean,
+    ptt?:boolean
   ) {
     try {
      const base64 = await getDUrl(url, requestConfig);
-     console.log("base64", base64.substr(0,20))
-      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId)
+      return await this.sendFile(to,base64,filename,caption,quotedMsgId,waitForId,ptt)
     } catch(error) {
       console.log('Something went wrong', error);
       throw error;
@@ -1227,16 +1257,16 @@ public async iAmAdmin(){
    */
   public async sendImageWithProduct(
     to: ChatId,
-    base64: Base64,
+    image: Base64,
     caption: Content,
     bizNumber: ContactId,
     productId: string
   ) {
     return await this.pup(
-      ({ to, base64, bizNumber, caption, productId }) => {
-        WAPI.sendImageWithProduct(base64, to, caption, bizNumber, productId);
+      ({ to, image, bizNumber, caption, productId }) => {
+        WAPI.sendImageWithProduct(image, to, caption, bizNumber, productId);
       },
-      { to, base64, bizNumber, caption, productId }
+      { to, image, bizNumber, caption, productId }
     );
   }
 
@@ -1564,6 +1594,18 @@ public async contactUnblock(id: ContactId) {
     return await this.pup(
       messageId => WAPI.getMessageById(messageId),
       messageId
+    ) as Promise<Message>;
+  }
+
+  /**
+   * Retrieves the last message sent by the host account in any given chat or globally.
+   * @param chatId This is optional. If no chat Id is set then the last message sent by the host account will be returned.
+   * @returns message object
+   */
+  public async getMyLastMessage(chatId?: ChatId) {
+    return await this.pup(
+      chatId => WAPI.getMyLastMessage(chatId),
+      chatId
     ) as Promise<Message>;
   }
 
@@ -1957,9 +1999,9 @@ public async getStatus(contactId: ContactId) {
  * @param imgData 'data:image/jpeg;base64,...` The base 64 data url. Make sure this is a small img (128x128), otherwise it will fail.
  * @returns boolean true if it was set, false if it didn't work. It usually doesn't work if the image file is too big.
  */
-  public async setGroupIcon(groupId: GroupChatId, b64: Base64) {
-    const buff = Buffer.from(b64.replace(/^data:image\/(png|gif|jpeg);base64,/,''), 'base64');
-    const mimeInfo = base64MimeType(b64);
+  public async setGroupIcon(groupId: GroupChatId, image: DataURL) {
+    const buff = Buffer.from(image.replace(/^data:image\/(png|gif|jpeg);base64,/,''), 'base64');
+    const mimeInfo = base64MimeType(image);
     console.log("setGroupIcon -> mimeInfo", mimeInfo)
     if(!mimeInfo || mimeInfo.includes("image")){
       //no matter what, convert to jpeg, resize + autoscale to width 48 px
@@ -1968,7 +2010,6 @@ public async getStatus(contactId: ContactId) {
       .toBuffer();
       const jpeg = sharp(scaledImageBuffer,{ failOnError: false }).jpeg();
       const imgData = `data:jpeg;base64,${(await jpeg.toBuffer()).toString('base64')}`;
-      console.log("setGroupIcon -> imgData", imgData)
       return await this.pup(
         ({ groupId, imgData }) => WAPI.setGroupIcon(groupId, imgData),
         { groupId, imgData }
@@ -2032,6 +2073,8 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
+  * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
+  * 
   * Change who can and cannot speak in a group
   * @param groupId '0000000000-00000000@g.us' the group id.
   * @param onlyAdmins boolean set to true if you want only admins to be able to speak in this group. false if you want to allow everyone to speak in the group
@@ -2097,7 +2140,7 @@ public async getStatus(contactId: ContactId) {
     return await this.pup(
       (groupId) => WAPI.getGroupAdmins(groupId),
       groupId
-    ) as Promise<Contact[]>;
+    ) as Promise<ContactId[]>;
   }
 
   /**
@@ -2114,9 +2157,8 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * [REQUIRES AN INSIDERS LICENSE-KEY](https://gumroad.com/l/BTMt?tier=Insiders%20Program)
    * 
-   * Start dark mode
+   * Start dark mode [NOW GENERALLY AVAILABLE]
    * @param {boolean} activate true to activate dark mode, false to deactivate
   */
   public async darkMode(activate: boolean) {
@@ -2139,7 +2181,7 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * Sends a sticker from a given URL
+   * Sends a sticker (including GIF) from a given URL
    * @param to: The recipient id.
    * @param url: The url of the image
    * @param requestConfig {} By default the request is a get request, however you can override that and many other options by sending this parameter. You can read more about this parameter here: https://github.com/axios/axios#request-config
@@ -2168,8 +2210,8 @@ public async getStatus(contactId: ContactId) {
    * @returns Promise<MessageId | boolean>
    */
   public async sendStickerfromUrlAsReply(to: ChatId, url: string, messageId: MessageId, requestConfig: any = {}) {
-    const b64 = await getDUrl(url, requestConfig);
-    let processingResponse = await this.prepareWebp(b64);
+    const dUrl = await getDUrl(url, requestConfig);
+    let processingResponse = await this.prepareWebp(dUrl);
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
@@ -2186,11 +2228,11 @@ public async getStatus(contactId: ContactId) {
    * 
    * 
    * @param to  The recipient id.
-   * @param b64  This is the base64 string formatted with data URI. You can also send a plain base64 string but it may result in an error as the function will not be able to determine the filetype before sending.
+   * @param image  This is the base64 string formatted with data URI. You can also send a plain base64 string but it may result in an error as the function will not be able to determine the filetype before sending.
    * @param messageId  The id of the message to reply to
    */
-  public async sendImageAsStickerAsReply(to: ChatId, b64: DataURL, messageId: MessageId){
-    let processingResponse = await this.prepareWebp(b64);
+  public async sendImageAsStickerAsReply(to: ChatId, image: DataURL, messageId: MessageId){
+    let processingResponse = await this.prepareWebp(image);
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
@@ -2219,11 +2261,11 @@ public async getStatus(contactId: ContactId) {
     );
   }
 
-  private async prepareWebp(b64: DataURL) {
-    const buff = Buffer.from(b64.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,''), 'base64');
-    const mimeInfo = base64MimeType(b64);
+  private async prepareWebp(image: DataURL) {
+    const buff = Buffer.from(image.replace(/^data:image\/(png|gif|jpeg|webp);base64,/,''), 'base64');
+    const mimeInfo = base64MimeType(image);
     if(!mimeInfo || mimeInfo.includes("image")){
-      let webpBase64 = b64;
+      let webpBase64 = image;
       let metadata : any = { width: 512, height: 512 };
       if(!mimeInfo.includes('webp')) {
         const { pages } = await sharp(buff).metadata();
@@ -2245,13 +2287,13 @@ public async getStatus(contactId: ContactId) {
   }
 
   /**
-   * This function takes an image and sends it as a sticker to the recipient. This is helpful for sending semi-ephemeral things like QR codes. 
+   * This function takes an image (including animated GIF) and sends it as a sticker to the recipient. This is helpful for sending semi-ephemeral things like QR codes. 
    * The advantage is that it will not show up in the recipients gallery. This function automatiicaly converts images to the required webp format.
    * @param to: The recipient id.
-   * @param b64: This is the base64 string formatted with data URI. You can also send a plain base64 string but it may result in an error as the function will not be able to determine the filetype before sending.
+   * @param image: This is the base64 string formatted as a data URI. 
    */
-  public async sendImageAsSticker(to: ChatId, b64: DataURL){
-    let processingResponse = await this.prepareWebp(b64);
+  public async sendImageAsSticker(to: ChatId, image: DataURL){
+    let processingResponse = await this.prepareWebp(image);
     if(!processingResponse) return false;
     let {webpBase64, metadata} = processingResponse;
       return await this.pup(
