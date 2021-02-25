@@ -14,7 +14,7 @@
     "outDir": "./dist" /* Redirect output structure to the directory. */,
     // "rootDir": "./src/",                   /* Specify the root directory of input files. Use to control the output directory structure with --outDir. */
     // "composite": true,                     /* Enable project compilation */
-    "removeComments": true /* Do not emit comments to output. */,
+    "removeComments": false /* Do not emit comments to output. */,
     // "noEmit": true,                        /* Do not emit outputs. */
     // "importHelpers": true,                 /* Import emit helpers from 'tslib'. */
     // "downlevelIteration": true,            /* Provide full support for iterables in 'for-of', spread, and destructuring when targeting 'ES5' or 'ES3'. */
@@ -172,6 +172,10 @@
                     "source": "./docs-source/how-to/incoming-calls.md"
                 },
                 {
+                    "title": "Use a proxy",
+                    "source": "./docs-source/how-to/use-a-proxy.md"
+                },
+                {
                     "title": "More Examples",
                     "source": "./docs-source/how-to/misc.md"
                 },
@@ -230,6 +234,9 @@
           "namespace",
           "SimpleListener",
           "SessionInfo",
+          "ChatMuteDuration",
+          "ERROR_NAME",
+          "CustomError"
         ]
     }
 }

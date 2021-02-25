@@ -5,4 +5,7 @@ export interface SessionInfo {
     BROWSER_VERSION: string;
     LAUNCH_TIME_MS ?: number;
     NUM ?: string;
+    OS ?: string;
+    START_TS ?: number;
+    PHONE_VERSION ?: string
 }

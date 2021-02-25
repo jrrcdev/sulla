@@ -26,6 +26,7 @@ export async function initClient(sessionId?: string, config?:ConfigObject, custo
     height: config?.viewport?.height || height,
     deviceScaleFactor: 1
   });
+  if(config?.resizable) config.defaultViewport= null
   const cacheEnabled = config?.cacheEnabled === false ? false : true;
   const blockCrashLogs = config?.blockCrashLogs === false ? false : true;
   await waPage.setBypassCSP(config?.bypassCSP || false);
@@ -82,6 +83,19 @@ export async function initClient(sessionId?: string, config?:ConfigObject, custo
     } catch (error) {
       sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
     }
+  } else {
+    const p = require?.main?.path || process?.mainModule?.path;
+    if(p) {
+      const altSessionJsonPath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(p,config?.sessionDataPath || '')) : path.join(path.resolve(p,config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+      if(fs.existsSync(altSessionJsonPath)) {
+        let s = fs.readFileSync(altSessionJsonPath, "utf8");
+        try {
+          sessionjson = JSON.parse(s);
+        } catch (error) {
+          sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
+        }
+      }
+    }
   }
   if(sessionjson) await waPage.evaluateOnNewDocument(
     session => {
@@ -97,6 +111,9 @@ export async function initClient(sessionId?: string, config?:ConfigObject, custo
 }
 
 export async function injectApi(page: Page) {
+  await page.addScriptTag({
+    path: require.resolve(path.join(__dirname, '../../node_modules/@pedroslopez/moduleraid', 'moduleraid.js'))
+  });
   await page.addScriptTag({
     path: require.resolve(path.join(__dirname, '../lib', 'wapi.js'))
   });
