@@ -1,39 +1,47 @@
- /**
-  * @hidden
-  */
-/** */
 import * as path from 'path';
-const fs = require('fs');
-const puppeteer = require('puppeteer-extra');
+import * as fs from 'fs';
+import ON_DEATH from 'death';
+// import puppeteer from 'puppeteer-extra';
 import { puppeteerConfig, useragent, width, height} from '../config/puppeteer.config';
 import { Browser, Page } from 'puppeteer';
 import { Spin, EvEmitter } from './events';
 import { ConfigObject } from '../api/model';
-const ON_DEATH = require('death'); //this is intentionally ugly
+import { FileNotFoundError, getTextFile } from 'pico-s3';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const puppeteer = require('puppeteer-extra')
+
 let browser;
 
-export async function initClient(sessionId?: string, config?:ConfigObject, customUserAgent?:string) {
-  if(config?.useStealth) puppeteer.use(require('puppeteer-extra-plugin-stealth')());
+export async function initPage(sessionId?: string, config?:ConfigObject, customUserAgent?:string, spinner ?: Spin) : Promise<Page> {
+  const setupPromises = [];
+  if(config?.resizable === undefined || !config?.resizable == false) config.defaultViewport= null
+  if(config?.useStealth) {
+    const {default : stealth} = await import('puppeteer-extra-plugin-stealth')
+    puppeteer.use(stealth());
+  }
+  spinner?.info('Launching Browser')
   browser = await initBrowser(sessionId,config);
+  
   const waPage = await getWAPage(browser);
+  spinner?.info('Setting Up Browser')
   if (config?.proxyServerCredentials) {
     await waPage.authenticate(config.proxyServerCredentials);
   }
-  await waPage.setUserAgent(customUserAgent||useragent);
+  setupPromises.push(waPage.setUserAgent(customUserAgent||useragent));
   if(config?.defaultViewport!==null)
-  await waPage.setViewport({
+  setupPromises.push(waPage.setViewport({
     width: config?.viewport?.width || width,
     height: config?.viewport?.height || height,
     deviceScaleFactor: 1
-  });
-  if(config?.resizable) config.defaultViewport= null
+  }));
   const cacheEnabled = config?.cacheEnabled === false ? false : true;
   const blockCrashLogs = config?.blockCrashLogs === false ? false : true;
-  await waPage.setBypassCSP(config?.bypassCSP || false);
-  await waPage.setCacheEnabled(cacheEnabled);
+  setupPromises.push(waPage.setBypassCSP(config?.bypassCSP || false));
+  setupPromises.push(waPage.setCacheEnabled(cacheEnabled));
   const blockAssets = !config?.headless ? false : config?.blockAssets || false;
   if(blockAssets){
-    puppeteer.use(require('puppeteer-extra-plugin-block-resources')({
+    const {default : block} = await import('puppeteer-extra-plugin-block-resources')
+    puppeteer.use(block({
       blockedTypes: new Set(['image', 'stylesheet', 'font'])
     }))
   }
@@ -50,101 +58,167 @@ export async function initClient(sessionId?: string, config?:ConfigObject, custo
     .replace('socks4', '')
     .replace('://', '')}` : config.proxyServerCredentials.address}` : false;
   let quickAuthed = false;
+  let proxy;
+  if(proxyAddr) {
+    proxy = (await import('puppeteer-page-proxy')).default
+  }
   if(interceptAuthentication || proxyAddr || blockCrashLogs){
-    await waPage.setRequestInterception(true);  
-    let authCompleteEv = new EvEmitter(sessionId, 'AUTH');
-    waPage.on('request', async request => {
-      if (
-        interceptAuthentication &&
-        request.url().includes('_priority_components') &&
-        !quickAuthed
-      ) {
-        authCompleteEv.emit(true);
-        await waPage.evaluate('window.WA_AUTHENTICATED=true;');
-        quickAuthed = true;
+      await waPage.setRequestInterception(true);  
+      const authCompleteEv = new EvEmitter(sessionId, 'AUTH');
+      waPage.on('request', async request => {
+        if (
+          interceptAuthentication &&
+          request.url().includes('_priority_components') &&
+          !quickAuthed
+        ) {
+          authCompleteEv.emit(true);
+          await waPage.evaluate('window.WA_AUTHENTICATED=true;');
+          quickAuthed = true;
+        }
+      if (request.url().includes('https://crashlogs.whatsapp.net/') && blockCrashLogs){
+        request.abort();
       }
-    if (request.url().includes('https://crashlogs.whatsapp.net/') && blockCrashLogs){
-      request.abort();
-    }
-    else if (proxyAddr) require('puppeteer-page-proxy')(request, proxyAddr);
-    else request.continue();
-    })
+      else if (proxyAddr && !config?.useNativeProxy) {
+        proxy(request, proxyAddr)
+      }
+      else request.continue();
+      })
+    
   }
 
-  //check if [session].json exists in __dirname
-  const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
-  let sessionjson = '';
-  let sd = process.env[`${sessionId.toUpperCase()}_DATA_JSON`] ? JSON.parse(process.env[`${sessionId.toUpperCase()}_DATA_JSON`]) : config?.sessionData;
-  sessionjson = (typeof sd === 'string') ? JSON.parse(Buffer.from(sd, 'base64').toString('ascii')) : sd;
-  if (fs.existsSync(sessionjsonpath)) {
-    let s = fs.readFileSync(sessionjsonpath, "utf8");
+  spinner?.info('Loading session data')
+  let sessionjson : any = getSessionDataFromFile(sessionId, config, spinner)
+  if(!sessionjson && config.sessionDataBucketAuth) {
     try {
-      sessionjson = JSON.parse(s);
+      spinner?.info('Unable to find session data file locally, attempting to find session data in cloud storage..')
+      sessionjson = JSON.parse(Buffer.from(await getTextFile({
+        directory: '_sessionData',
+        ...JSON.parse(Buffer.from(config.sessionDataBucketAuth, 'base64').toString('ascii')),
+        filename: `${config.sessionId || 'session'}.data.json`
+      }), 'base64').toString('ascii'));
+      spinner?.succeed('Successfully downloaded session data file from cloud storage!')
     } catch (error) {
-      sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
-    }
-  } else {
-    const p = require?.main?.path || process?.mainModule?.path;
-    if(p) {
-      const altSessionJsonPath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(p,config?.sessionDataPath || '')) : path.join(path.resolve(p,config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
-      if(fs.existsSync(altSessionJsonPath)) {
-        let s = fs.readFileSync(altSessionJsonPath, "utf8");
-        try {
-          sessionjson = JSON.parse(s);
-        } catch (error) {
-          sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
-        }
-      }
+      spinner?.fail(`${error instanceof FileNotFoundError ? 'The session data file was not found in the cloud storage bucket' : 'Something went wrong while fetching session data from cloud storage bucket'}. Continuing...`)
     }
   }
-  if(sessionjson) await waPage.evaluateOnNewDocument(
-    session => {
+  if(config?.multiDevice) sessionjson = {
+    ...sessionjson,
+    "md-opted-in": "true"
+  }
+  if(sessionjson) {
+  spinner?.info(config.multiDevice ?  "multi-device enabled. Session data skipped..." : 'Existing session data detected. Injecting...')
+    await waPage.evaluateOnNewDocument(
+  session => {
         localStorage.clear();
         Object.keys(session).forEach(key=>localStorage.setItem(key,session[key]));
     }, sessionjson);
-    if(config?.proxyServerCredentials) {
-      await require('puppeteer-page-proxy')(waPage, proxyAddr);
-      console.log(`Active proxy: ${config.proxyServerCredentials.address}`)
+    spinner?.succeed('Existing session data injected')
+  }
+    if(config?.proxyServerCredentials && !config?.useNativeProxy) {
+      await proxy(waPage, proxyAddr);
     }
-  await waPage.goto(puppeteerConfig.WAUrl)
+  if(config?.proxyServerCredentials?.address) spinner.succeed(`Active proxy: ${config.proxyServerCredentials.address}`)
+  await Promise.all(setupPromises);
+  spinner?.info('Navigating to WA')
+  try {
+    //try twice 
+    const WEB_START_TS = new Date().getTime();
+    const webRes = await waPage.goto(puppeteerConfig.WAUrl)
+    const WEB_END_TS = new Date().getTime();
+    if(webRes==null) {
+      spinner?.info(`Page loaded but something may have gone wrong: ${WEB_END_TS - WEB_START_TS}ms`)
+    } else {
+      spinner?.info(`Page loaded in ${WEB_END_TS - WEB_START_TS}ms: ${webRes.status()}${webRes.ok() ? '' : ', ' +webRes.statusText()}`)
+      if(!webRes.ok()) spinner?.info(`Headers Info: ${JSON.stringify(webRes.headers(), null, 2)}`)
+    }
+  } catch (error) {
+    spinner?.fail(error);
+    throw error
+  }
   return waPage;
 }
 
-export async function injectApi(page: Page) {
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../../node_modules/@pedroslopez/moduleraid', 'moduleraid.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'wapi.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'axios.min.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'jsSha.min.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'base64.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'qr.min.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'hash.js'))
-  });
-  await page.addScriptTag({
-    path: require.resolve(path.join(__dirname, '../lib', 'launch.js'))
-  });
+const getSessionDataFromFile = (sessionId: string, config: ConfigObject, spinner ?: Spin) => {
+  if(config?.sessionData == "NUKE") return '' 
+  //check if [session].json exists in __dirname
+  const sessionjsonpath = getSessionDataFilePath(sessionId,config)
+  let sessionjson = '';
+  const sd = process.env[`${sessionId.toUpperCase()}_DATA_JSON`] ? JSON.parse(process.env[`${sessionId.toUpperCase()}_DATA_JSON`]) : config?.sessionData;
+  sessionjson = (typeof sd === 'string') ? JSON.parse(Buffer.from(sd, 'base64').toString('ascii')) : sd;
+  if (sessionjsonpath && typeof sessionjsonpath == 'string' && fs.existsSync(sessionjsonpath)) {
+    spinner.succeed(`Found session data file: ${sessionjsonpath}`)
+    const s = fs.readFileSync(sessionjsonpath, "utf8");
+    try {
+      sessionjson = JSON.parse(s);
+    } catch (error) {
+      try {
+      sessionjson = JSON.parse(Buffer.from(s, 'base64').toString('ascii'));
+      } catch (error) {
+        const msg = "Session data json file is corrupted. Please reauthenticate."
+      if(spinner) {
+        spinner.fail(msg)
+      } else console.error(msg);
+      return false;
+      }
+    }
+  } else {
+    spinner.succeed(`No session data file found for session : ${sessionId}`)
+  }
+  return sessionjson;
+}
+
+export const deleteSessionData = (config: ConfigObject) : boolean => {
+  const sessionjsonpath = getSessionDataFilePath(config?.sessionId || 'session', config)
+  if(typeof sessionjsonpath == 'string' && fs.existsSync(sessionjsonpath)) {
+    console.log("logout detected, deleting session data")
+    fs.unlinkSync(sessionjsonpath);
+  }
+  return true;
+}
+
+export const getSessionDataFilePath = (sessionId: string, config: ConfigObject) : string | boolean => {
+  const p = require?.main?.path || process?.mainModule?.path;
+  const sessionjsonpath = (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(process.cwd(),config?.sessionDataPath || '')) : path.join(path.resolve(process.cwd(),config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`);
+  const altSessionJsonPath = p ? (config?.sessionDataPath && config?.sessionDataPath.includes('.data.json')) ? path.join(path.resolve(p,config?.sessionDataPath || '')) : path.join(path.resolve(p,config?.sessionDataPath || ''), `${sessionId || 'session'}.data.json`) : false;
+  if(fs.existsSync(sessionjsonpath)){
+    return sessionjsonpath
+  } else if(p && altSessionJsonPath && fs.existsSync(altSessionJsonPath)){
+    return altSessionJsonPath
+  }
+  return false
+}
+
+export const addScript = (page: Page, js : string) : Promise<unknown> => page.addScriptTag({
+  path: require.resolve(path.join(__dirname, '../lib', js))
+})
+
+export async function injectApi(page: Page) : Promise<Page> {
+await Promise.all(
+  [
+    'axios.min.js',
+    'jsSha.min.js',
+    'qr.min.js',
+    'base64.js',
+    'hash.js'
+  ].map(js=>addScript(page,js))
+  );
+  await addScript(page,'wapi.js')
+  await addScript(page,'launch.js')
   return page;
 }
 
 async function initBrowser(sessionId?: string, config:any={}) {
+  if(config?.raspi) {
+    config.executablePath = "/usr/bin/chromium-browser"
+  }
+
   if(config?.useChrome && !config?.executablePath) {
-    const storage = require('node-persist');
+    const {default : storage} = await import('node-persist');
     await storage.init();
-    let _savedPath = await storage.getItem('executablePath');
+    const _savedPath = await storage.getItem('executablePath');
     if(!_savedPath) {
-      config.executablePath = require('chrome-launcher').Launcher.getInstallations()[0];
+      const chromeLauncher = await import('chrome-launcher')
+      config.executablePath = chromeLauncher.Launcher.getInstallations()[0];
       await storage.setItem('executablePath',config.executablePath)
     } else config.executablePath = _savedPath;
   }
@@ -167,24 +241,40 @@ async function initBrowser(sessionId?: string, config:any={}) {
     }
   }
   
-  // if(config?.proxyServerCredentials?.address) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
+  if(config?.proxyServerCredentials?.address && config?.useNativeProxy) puppeteerConfig.chromiumArgs.push(`--proxy-server=${config.proxyServerCredentials.address}`)
   if(config?.browserWsEndpoint) config.browserWSEndpoint = config.browserWsEndpoint;
   let args = [...puppeteerConfig.chromiumArgs,...(config?.chromiumArgs||[])];
+  if(config?.multiDevice) {
+    args = args.filter(x=>x!='--incognito')
+    config["userDataDir"] = `./_IGNORE_${config?.sessionId || 'session'}`
+  }
   if(config?.corsFix) args.push('--disable-web-security');
   const browser = (config?.browserWSEndpoint) ? await puppeteer.connect({...config}): await puppeteer.launch({
     headless: true,
-    devtools: false,
     args,
-    ...config
+    ...config,
+    devtools: false
   });
   //devtools
-  if(config&&config.devtools){
-    const devtools = require('puppeteer-extra-plugin-devtools')();
-    if(config.devtools.user&&config.devtools.pass) devtools.setAuthCredentials(config.devtools.user, config.devtools.pass)
+  if(config?.devtools){
+    const devtools = (await import('puppeteer-extra-plugin-devtools'))();
+    if(config.devtools !== 'local' && !config?.devtools?.user && !config?.devtools?.pass){
+      config.devtools = {};
+      config.devtools.user = 'dev';
+      const uuid = (await import('uuid-apikey')).default
+      config.devtools.pass = uuid.create().apiKey;
+    }
+
+    if(config.devtools.user&&config.devtools.pass) {
+      devtools.setAuthCredentials(config.devtools.user, config.devtools.pass)
+    } 
     try {
       // const tunnel = await devtools.createTunnel(browser);
-      const tunnel = devtools.getLocalDevToolsUrl(browser);
-      console.log('\ndevtools URL: '+tunnel);
+      const tunnel = config.devtools == 'local' ? devtools.getLocalDevToolsUrl(browser) : (await devtools.createTunnel(browser)).url;
+      console.log('\ndevtools URL: ', typeof config.devtools == 'object' ? {
+        ...config.devtools,
+        tunnel
+      } : tunnel);
     } catch (error) {
     console.log("TCL: initBrowser -> error", error)
     }
@@ -198,7 +288,7 @@ async function getWAPage(browser: Browser) {
   return pages[0];
 }
 
-ON_DEATH(async (signal, err) => {
+ON_DEATH(async () => {
   //clean up code here
   if (browser) await browser.close();
 });

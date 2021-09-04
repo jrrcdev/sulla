@@ -1,4 +1,7 @@
+import { AxiosRequestConfig } from 'axios';
+import { PREPROCESSORS } from '../../structures/preProcessors';
 import { Base64 } from "./aliases";
+import { SimpleListener } from './events';
 
 /**
  * The different types of qr code output.
@@ -9,6 +12,32 @@ export enum QRFormat{
     WEBM = 'webm'
   }
 
+
+export enum CLOUD_PROVIDERS {
+    GCP = "GCP",
+    WASABI = "WASABI",
+    AWS = "AWS"
+}
+
+export enum DIRECTORY_STRATEGY {
+    /**
+     * E.g `/2021-08-16/`
+     */
+    DATE = "DATE",
+    /**
+     * E.g `/447123456789/`
+     */
+    CHAT = "CHAT",
+    /**
+     * E.g `/447123456789/2021-08-16/`
+     */
+    CHAT_DATE = "CHAT_DATE",
+    /**
+     * E.g `/2021-08-16/447123456789/`
+     */
+    DATE_CHAT = "DATE_CHAT"
+}
+
   /**
    * The available languages for the host security notification
    */
@@ -18,7 +47,39 @@ export enum QRFormat{
       DEDE = 'de-de',
       IDID = 'id-id',
       ITIT = 'it-it',
+      NLNL = 'nl-nl',
       ES = 'es',
+  }
+
+  export enum OnError {
+      /**
+       * Return it as a string
+       */
+    AS_STRING = "AS_STRING",
+    /**
+     * Do not log anything, just return `false`
+     */
+    RETURN_FALSE = "RETURN_FALSE",
+    /**
+     * throw the error
+     */
+     THROW = "THROW",
+    /**
+     * Log the error and return false
+     */
+    LOG_AND_FALSE = "LOG_AND_FALSE",
+    /**
+     * Log the error AND return the string
+     */
+    LOG_AND_STRING = "LOG_AND_STRING",
+    /**
+     * Return the error object
+     */
+    RETURN_ERROR = "RETURN_ERROR",
+    /**
+     * Do nothing.
+     */
+    NOTHING = "NOTHING"
   }
   
   /**
@@ -35,6 +96,17 @@ export enum QRFormat{
     EIGHT = 0.8,
     NINE = 0.9,
     TEN = 1.0,
+  }
+
+
+  export enum LicenseType {
+      CUSTOM = "CUSTOM",
+      B2B_RESTRICTED_VOLUME_LICENSE = "B2B_RESTRICTED_VOLUME_LICENSE",
+      INSIDER = "Insiders Program",
+      TEXT_STORY = "Text Story License Key",
+      IMAGE_STORY = "Image Story License Key",
+      VIDEO_STORY = "Video Story License Key",
+      PREMIUM = "Premium License Key"
   }
 
 export interface SessionData {
@@ -55,6 +127,55 @@ export interface DevTools {
     pass : string
 }
 
+export interface EventPayload {
+    //epoch timestamp
+    ts : number;
+    //session id
+    sessionId: string;
+    //id of the webhook event. Useful for idempotency
+    id: string;
+    //the event type
+    event: SimpleListener;
+    //the actual data emitted from the original event
+    data: any;
+    //The event payload can have other undocumented properties
+    [k : string]: any;
+  }
+
+export interface Webhook {
+    /**
+     * The endpoint to send (POST) the event to.
+     */
+    url: string;
+    /**
+     * The optional AxiosRequestConfig to use for firing the webhook event. This can be useful if you want to add some authentication when POSTing data to your server.
+     * 
+     * For example, if your webhook requires the username `admin` and password `1234` for authentication, you can set the requestConfig to:
+     * ```
+     * {
+     *   auth: {
+     *     username: "admin",
+     *     password: "1234",
+     *   }
+     * }
+     * ```
+     * 
+     * Please note, for security reasons, this is not returned when listing webhooks however it is returned when registering a webhook for verification purposes.
+     */
+    requestConfig ?: AxiosRequestConfig;
+    /**
+     * The ID of the given webhook setup. Use this ID with [[removeWebhook]]
+     */
+    id: string;
+    /**
+     * An array of events that are registered to be sent to this webhook.
+     */
+    events: SimpleListener[];
+    /**
+     * Time when the webhook was registered in epoch time 
+     */
+     ts: number;
+}
 export interface ProxyServerCredentials {
     /**
      * The protocol on which the proxy is running. E.g `http`, `https`, `socks4` or `socks5`. This is optional and can be automatically determined from the address.
@@ -352,7 +473,7 @@ export interface ConfigObject {
      */
     hostNotificationLang ?: NotificationLanguage;
     /**
-     * Setting this to true will block all assets from loading onto the page. This may result in some load time impreovements but also increases instability. 
+     * Setting this to true will block all assets from loading onto the page. This may result in some load time improvements but also increases instability. 
      * @default `false`
      */
     blockAssets ?: boolean;
@@ -364,7 +485,7 @@ export interface ConfigObject {
     keepUpdated ?: boolean;
     /**
      * Syncs the viewport size with the window size which is how normal browsers act. Only relevant when `headless: false` and this overrides `viewport` config.
-     * @default `false`
+     * @default `true`
      */
     resizable ?: boolean;
     /**
@@ -423,7 +544,7 @@ export interface ConfigObject {
      * 
      * This is useful because you can register/deregister the event listener as needed whereas the legacy method of setting callbacks are only be set once
      * 
-     * @default false;
+     * @default `true`;
      */
     eventMode ?: boolean;
     /**
@@ -441,15 +562,179 @@ export interface ConfigObject {
      */
     idCorrection ?: boolean;
     /**
-     * From v4, sharp and ffmpeg will be unbundled from the library in exchange for a sticker API. You should be able to host this API yourself that can serves multiple sessions/processes.
      * 
-     * Until v4 is released, this is hardcoded to `https://open-wa-sticker-api.herokuapp.com` and any and all sticker API requests will be going to this API untill further notice.
-     * 
-     * If you want to continue using the built-in ffmpeg/sharp functionality then set this to `false`.
+     * Redundant until self-hostable sticker server is available.
      * 
      * @default `https://open-wa-sticker-api.herokuapp.com`
      */
     stickerServerEndpoint ?: string | boolean;
+    /**
+     * This will force the library to use the default cached raw github link for patches to shave a few hundred milliseconds from your launch time. If you use this option, you will need to wait about 5 minutes before trying out new patches.
+     * @default `false`
+     */
+    cachedPatch ?: boolean;
+    /**
+     * Setting `this` to true will replace the `console.table` with a stringified logging of the debug info object instead. This would be useful to set for smaller terminal windows. If `disableSpins` is `true` then this will also be `true`.
+     * @default `false`
+     */
+    logDebugInfoAsObject ?: boolean;
+    /**
+     * Kill the client when a logout is detected
+     * @default `false`
+     */
+    killClientOnLogout ?: boolean;
+    /**
+     * This will make the `create` command return `false` if the detected session data is expired.
+     * 
+     * This will mean, the process will not attempt to automatically get a new QR code.
+     * 
+     * @default `false`
+     */
+    throwOnExpiredSessionData ?: boolean;
+    /**
+     * Some sessions may experience issues with sending media when using proxies. Using the native proxy system instead of the recommended 3rd party library may fix these issues.
+     * 
+     * @default `false`
+     */
+     useNativeProxy ?: boolean;
+    /**
+     * Set this to `true` to make the library work on Raspberry Pi OS.
+     * 
+     * Make sure to run the following command before running the library the first time:
+     * 
+     * ```
+     * > sudo apt update -y && sudo apt install chromium-browser chromium-codecs-ffmpeg -y && sudo apt upgrade
+     * ```
+     * 
+     * If you're using the CLI, you can set this value to `true` by adding the following flag to the CLI command
+     * 
+     * ```
+     * > npx @open-wa/wa-automate ... --raspi
+     * ```
+     * 
+     * @default `false`
+     */
+     raspi ?: boolean;
+     /**
+      * Default pqueue options applied to all listeners that can take pqueue options as a second optional parameter. For now, this only includes `onMessage` and `onAnyMessage`.
+      * 
+      * See: https://github.com/sindresorhus/p-queue#options
+      * 
+      * Example: process 5 events within every 3 seconds window. Make sure to only process at most 2 at any one time. Make sure there is at least 100ms between each event processing.
+      * 
+      * ```javascript
+      *     {   
+      *         intervalCap: 5, //process 5 events
+      *         interval: 3000, //within every three second window
+      *         concurrency: 2, //make sure to process, at most, 2 events at any one time
+      *         timeout: 100, //make sure there is a 100ms gap between each event processing.
+      *         carryoverConcurrencyCount: true //If there are more than 5 events in that period, process them within the next 3 second period. Make sure this is always set to true!!!
+      *     }
+      * ```
+      * 
+      * @default `undefined`
+      */
+     pQueueDefault ?: any
+     /**
+      * Set a preprocessor for messages. See [[PREPROCESSORS]] for more info.
+      * 
+      * options: `SCRUB`, `BODY_ONLY`, `AUTO_DECRYPT`, `AUTO_DECRYPT_SAVE`, `UPLOAD_CLOUD`.
+      * @default `undefined`
+      */
+     messagePreprocessor ?: PREPROCESSORS,
+     /**
+      * REQUIRED IF `messagePreprocessor` IS SET TO `UPLOAD_CLOUD`.
+      * 
+      * This can be set via the config or the corresponding environment variables.
+      */
+     cloudUploadOptions ?: {
+         /**
+          * `AWS`, `GCP` or `WASABI`
+          * 
+          * env: `OW_CLOUD_ACCESS_KEY_ID`
+          */
+         provider: CLOUD_PROVIDERS,
+         /**
+          * S3 compatible access key ID. 
+          * 
+          * e.g: `AKIAIOSFODNN7EXAMPLE` or `GOOGTS7C7FUP3AIRVJTE2BCD`
+          * 
+          * env: `OW_CLOUD_ACCESS_KEY_ID`
+          */
+         accessKeyId : string,
+         /**
+          * S3 compatible secret access key.
+          * 
+          * e.g `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+          * 
+          * env: `OW_CLOUD_SECRET_ACCESS_KEY`
+          */
+         secretAccessKey : string,
+         /**
+          * Bucket name
+          * 
+          * env: `OW_CLOUD_BUCKET`
+          */
+         bucket: string,
+         /**
+          * Bucket region.
+          * 
+          * Not required for `GCP` provider
+          * 
+          * env: `OW_CLOUD_REGION`
+          * 
+          */ 
+         region ?: string
+         /**
+          * Ignore processing of messages that are sent by the host account itself
+          * 
+          * env: `OW_CLOUD_IGNORE_HOST`
+          */
+         ignoreHostAccount ?: boolean
+         /**
+          * The directory strategy to use when uploading files. Or just set it to a custom directory string.
+          * 
+          * env: `OW_DIRECTORY`
+          */
+         directory ?: DIRECTORY_STRATEGY | string
+     },
+     /**
+      * What to do when an error is detected on a client method.
+      * 
+      * @default `NOTHING`
+      */
+    onError ?: OnError
+    /**
+     * 
+     * Please note that multi-device is still in beta so a lot of things may not work. It is HIGHLY suggested to NOT use this in production!!!!
+     * 
+     * Set this to true if you're using the multidevice beta.
+     * 
+     * @default `false`
+     */
+    multiDevice ?: boolean
+    /**
+     * Base64 encoded S3 Bucket & Authentication object for session data files. The object should be in the same format as cloudUploadOptions.
+     */
+    sessionDataBucketAuth ?: string
+    /**
+     * Set the automatic emoji detection character. Set this to false to disable auto emoji. Default is `:`.
+     * 
+     * @default `:`
+     */
+    autoEmoji ?: string;
+    /**
+     * Set the maximum amount of chats to be present in a session.
+     */
+    maxChats ?: number;
+    /**
+     * Set the maximum amount of messages to be present in a session. 
+     */
+     maxMessages ?: number;
+     /**
+      * Your Discord ID to get onto the sticker leaderboard!
+      */
+     discord ?: string
     /**@internal */
     [x: string]: any 
 }

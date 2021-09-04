@@ -1,9 +1,13 @@
-import { ChatId, ContactId, MessageId } from "./aliases";
+import { ChatId, MessageId } from "./aliases";
+import { Button, Row, Section } from "./button";
 import { Chat } from "./chat";
 import { Contact } from "./contact";
-import { GroupMetadata } from "./group-metadata";
 
 export interface Message {
+  /**
+   * The ID of the selected button
+   */ 
+  selectedButtonId: string;
   /**
    * The id of the message
    */
@@ -16,6 +20,10 @@ export interface Message {
    * The type of the message, see [[MessageTypes]]
    */
   type: MessageTypes;
+  /**
+   * Used to checking the integrity of the decrypted media.
+   */
+  filehash ?: string;
   mimetype?: string;
   /**
    * The latitude of a location message
@@ -45,7 +53,7 @@ export interface Message {
   /**
    * Indicates whether the message was sent by the host account
    */
-  self: boolean;
+  self: "in" | "out";
   /**
    * The length of the media in the message, if it exists.
    */
@@ -86,6 +94,12 @@ export interface Message {
    * the timestanmp of the message
    */
   timestamp: number;
+  /**
+   * When `config.messagePreprocessor: "AUTO_DECRYPT_SAVE"` is set, media is decrypted and saved on disk in a folder called media relative to the current working directory.
+   * 
+   * This is the filePath of the decrypted file.
+   */
+  filePath ?: string;
   content: string;
   isGroupMsg: boolean;
   isMMS: boolean;
@@ -104,14 +118,37 @@ export interface Message {
   author: string;
   /**
    * @deprecated
+   * 
+   * Ironically, you should be using `deprecatedMms3Url` instead
    */
   clientUrl: string;
   deprecatedMms3Url: string;
   quotedMsg ?: Message;
   quotedMsgObj ?: Message;
-  mediaData: {};
+  mediaData: unknown;
   shareDuration: number;
   isAnimated: boolean;
+  /**
+   * The URL of the file after being uploaded to the cloud using a cloud upload message preprocessor.
+   */
+   cloudUrl?: string;
+   /**
+    * Buttons associated with the message
+    */
+   buttons ?: Button[]
+   /**
+    * List response associated with the message
+    */
+    listResponse ?: Row
+    /**
+     * The list associated with the list message
+     */
+    list ?: {
+      "sections": Section[],
+      "title": string,
+      "description": string,
+      "buttonText":  string,
+    }
 }
 
 
@@ -132,8 +169,11 @@ export enum MessageTypes {
   CONTACT_CARD = 'vcard',
   CONTACT_CARD_MULTI = 'multi_vcard',
   REVOKED = 'revoked',
+  ORDER = 'order',
+  BUTTONS_RESPONSE = 'buttons_response',
+  LIST_RESPONSE = "list_response",
   UNKNOWN = 'unknown'
-};
+}
 
 /**
  * Message ACK
@@ -147,5 +187,4 @@ export enum MessageAck {
   ACK_DEVICE = 2,
   ACK_READ = 3,
   ACK_PLAYED = 4,
-};
-
+}

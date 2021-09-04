@@ -29,6 +29,22 @@ export type StickerMetadata = {
      * Setting this to `true` will skip the resizing/square-cropping of the sticker. It will instead 'letterbox' the image with a transparent background.
      */
     keepScale ?: boolean
+    /**
+     * Applies a circular mask to the sticker. Works on images only for now.
+     */
+    circle ?: boolean
+    /**
+     * Your Discord ID to get onto the sticker leaderboard!
+     */
+    discord ?: string
+    /**
+     * Crop position
+     * 
+     * Learn more: https://sharp.pixelplumbing.com/api-resize
+     * 
+     * @default `attention`
+     */
+     cropPosition ?: 'top' | 'right top' | 'right' | 'right bottom' | 'bottom' | 'left bottom' | 'left' | 'left top' | 'north' | 'northeast' | 'east' | 'southeast' | 'south' | 'southwest' | 'west' | 'northwest' | 'center' | 'centre' | 'entropy' | 'attention'
   }
 
   export type Mp4StickerConversionProcessOptions = {
@@ -62,6 +78,11 @@ export type StickerMetadata = {
      * @default `false`
      */
     log?: boolean
+    /**
+     * A number representing the WxH of the output sticker (default `512x512`). Lowering this number is a great way to process longer duration stickers. The max value is `512`.
+     * default `512`
+     */
+    square ?: number
   }
 
   export const defaultProcessOptions : Mp4StickerConversionProcessOptions = {
@@ -70,5 +91,6 @@ export type StickerMetadata = {
     endTime :  `00:00:05.0`,
     loop: 0,
     crop: true,
-    log: false
+    log: false,
+    square: 512
   }
